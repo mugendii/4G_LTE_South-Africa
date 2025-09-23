@@ -1,4 +1,6 @@
+#include <Arduino.h>
 #include <HardwareSerial.h>
+#include <config.h>
 
 // Function prototypes
 bool testAT();
@@ -12,8 +14,9 @@ void checkConnectionStatus();
 bool waitForResponse(String expectedResponse, unsigned long timeout);
 void printATResponse(String label);
 void sendATCommand(String command);
+void sendWaterMeterData(const char* serverUrl);
 
-// Define pins for A7670E module (adjust based on your LILYGO board)
+// Define pins for A7670E module (based on  LILYGO board)
 #define MODEM_UART_BAUD   115200
 #define MODEM_DTR_PIN     25
 #define MODEM_TX_PIN      26
@@ -21,22 +24,13 @@ void sendATCommand(String command);
 #define MODEM_PWRKEY_PIN  4
 #define MODEM_POWER_ON_PIN 23
 
-// Safaricom Kenya APN settings
-const char* apn = "safaricom";
-const char* gprsUser = "";
-const char* gprsPass = "";
-
-// SIM PIN (change this to your actual PIN)
-const char* simPIN = "1234"; // Replace with your actual PIN
 
 HardwareSerial SerialAT(1);
 
 void setup() {
   Serial.begin(115200);
   delay(10000);
-  
-  Serial.println("Starting A7670E setup...");
-  
+   
   // Initialize modem power pins
   pinMode(MODEM_PWRKEY_PIN, OUTPUT);
   pinMode(MODEM_POWER_ON_PIN, OUTPUT);
@@ -57,64 +51,71 @@ void setup() {
   
   // Initialize serial communication with modem
   SerialAT.begin(MODEM_UART_BAUD, SERIAL_8N1, MODEM_RX_PIN, MODEM_TX_PIN);
-  
-  Serial.println("Initializing modem...");
-  
+    
   // Test AT communication
   if (testAT()) {
-    Serial.println("✓ Modem responding to AT commands");
+    Serial.println("Modem response OK");
   } else {
-    Serial.println("✗ Modem not responding. Check connections.");
+    Serial.println("Modem not responding. Check connections.");
     return;
   }
   
   // Check SIM card
   if (checkSIM()) {
-    Serial.println("✓ SIM card detected");
+    Serial.println("SIM card detected");
   } else {
-    Serial.println("✗ SIM card not detected");
+    Serial.println("SIM card not detected");
     return;
   }
   
   // Enter SIM PIN if required
   if (enterPIN()) {
-    Serial.println("✓ SIM PIN entered successfully");
+    Serial.println("SIM PIN entered successfully");
   } else {
-    Serial.println("✗ Failed to enter SIM PIN");
+    Serial.println("Failed to enter SIM PIN");
     return;
   }
   
   // Wait for network registration
   if (waitForNetwork()) {
-    Serial.println("✓ Registered on network");
+    Serial.println("Registered on network");
   } else {
-    Serial.println("✗ Failed to register on network");
+    Serial.println("Failed to register on network");
     return;
   }
   
   // Configure GPRS settings
   if (configureGPRS()) {
-    Serial.println("✓ GPRS configured successfully");
+    Serial.println("GPRS configured successfully");
   } else {
-    Serial.println("✗ Failed to configure GPRS");
+    Serial.println("Failed to configure GPRS");
     return;
   }
   
   // Connect to internet
   if (connectToInternet()) {
-    Serial.println("✓ Connected to internet!");
+    Serial.println("Connected to internet!");
     printConnectionInfo();
   } else {
-    Serial.println("✗ Failed to connect to internet");
+    Serial.println("Failed to connect to internet");
+    return;
   }
 }
 
 void loop() {
-  // Check connection status every 30 seconds
-  static unsigned long lastCheck = 0;
-  if (millis() - lastCheck > 30000) {
-    lastCheck = millis();
+  // Check connection status and send data every 60 seconds
+  static unsigned long lastAction = 0;
+  const unsigned long interval = 60000; // 60 seconds
+  
+  if (millis() - lastAction >= interval) {
+    lastAction = millis();
+    
+    // Check connection status
     checkConnectionStatus();
+    
+    // Send water meter data
+    Serial.println("Sending data...");
+    sendWaterMeterData(serverUrl);
   }
   
   delay(1000);
@@ -369,7 +370,6 @@ void sendATCommand(String command) {
   Serial.println("---");
 }
 
-
 void sendWaterMeterData(const char* serverUrl) {
     // Initialize HTTP service
     SerialAT.println("AT+HTTPINIT");
@@ -432,4 +432,3 @@ void sendWaterMeterData(const char* serverUrl) {
     SerialAT.println("AT+HTTPTERM");
     delay(1000);
 }
-
